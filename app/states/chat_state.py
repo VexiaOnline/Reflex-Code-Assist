@@ -57,9 +57,9 @@ class ChatState(rx.State):
         """Load RAG data and model if not already loaded."""
         if self._all_docs:
             return
-        docs_path = "reflex_docs.json"
+        docs_path = "rag/reflex_docs.json"
         if not os.path.exists(docs_path):
-            logging.info("reflex_docs.json not found, RAG will be disabled.")
+            logging.info("rag/reflex_docs.json not found, RAG will be disabled.")
             return
         try:
             import numpy as np
