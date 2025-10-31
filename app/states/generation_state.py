@@ -9,7 +9,7 @@ class CodeBlock(TypedDict):
 
 
 class Generation(TypedDict):
-    type: Literal["explanation", "code"]
+    type: Literal["explanation", "code", "thinking"]
     content: str | CodeBlock
     file_path: str | None
 
@@ -51,7 +51,23 @@ class GenerationState(rx.State):
             if not project_state.has_active_project:
                 yield rx.toast.error("No active project. Cannot apply code.")
                 return
-            full_path = os.path.join(project_state.current_project_path, file_path)
+            current_project_path = project_state.current_project_path
+            sanitized_file_path = file_path.replace(os.path.sep, "/")
+            project_path_for_strip = current_project_path.replace(os.path.sep, "/")
+            while sanitized_file_path.startswith(project_path_for_strip):
+                sanitized_file_path = sanitized_file_path[
+                    len(project_path_for_strip) :
+                ].lstrip("/")
+            full_path = os.path.normpath(
+                os.path.join(current_project_path, sanitized_file_path)
+            )
+            if not os.path.abspath(full_path).startswith(
+                os.path.abspath(project_state.current_project_path)
+            ):
+                yield rx.toast.error(
+                    "Invalid file path detected (directory traversal attempt)."
+                )
+                return
             parent_dir = os.path.dirname(full_path)
             if parent_dir:
                 os.makedirs(parent_dir, exist_ok=True)

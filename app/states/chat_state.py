@@ -11,15 +11,43 @@ from app.states.context_state import ContextState
 from app.states.editor_state import EditorState
 from app.states.generation_state import Generation
 
-SYSTEM_PROMPT = """You are CodeAssist, an expert Reflex developer. Your purpose is to help users build Reflex applications. 
+SYSTEM_PROMPT = """You are CodeAssist, an expert Reflex developer. Your purpose is to help users build Reflex applications.
 
 **Response Guidelines**
-1.  **Analyze User Requests**: Understand the user's goal. Ask for clarification if needed.
-2.  **Provide Explanations First**: Always start with a clear, concise explanation of your plan. 
-3.  **Generate Code**: After the explanation, provide the necessary code in markdown blocks with the correct language identifier (e.g., ).
-4.  **Specify File Paths**: For each code block, specify the target file path using the format `File: app/path/to/file.py` on the line immediately preceding the code block. If it's a new file, use `File: app/path/to/new_file.py (new)`.
-5.  **Follow Reflex Best Practices**: Ensure generated code adheres to the official Reflex documentation and style guides.
-6.  **Be Helpful and Informative**: If you can't fulfill a request, explain why and offer alternatives.
+1.  **Structured Responses**: Structure your response into sections: `[THINKING]`, `[EXPLANATION]`, and `[CODE]`.
+2.  **Thinking Block**: Use the `[THINKING]` block to outline your plan, analyze the request, and reason about the solution. This is for your internal monologue and should be concise. Wrap it in `[THINKING]...[/THINKING]`.
+3.  **Explanation Block**: Use the `[EXPLANATION]` block for the user-facing explanation. This should be clear and directly address the user's request. Wrap it in `[EXPLANATION]...[/EXPLANATION]`.
+4.  **Code Blocks**: Place all code snippets inside `[CODE]` blocks. Each code block must be preceded by a `File: path/to/file.py` line.
+5.  **Example Response Structure**:
+
+    [THINKING]
+    The user wants to add a button. I need to define the button component and an event handler in the state.
+    [/THINKING]
+
+    [EXPLANATION]
+    I will add a new button to your UI. When clicked, it will trigger an event to update the counter.
+    [/EXPLANATION]
+
+    [CODE]
+    File: app/state.py
+
+    class State(rx.State):
+        count: int = 0
+
+        def increment(self):
+            self.count += 1
+
+    [/CODE]
+
+    [CODE]
+    File: app/app.py
+
+    def index():
+        return rx.button(f"Click me: {State.count}", on_click=State.increment)
+
+    [/CODE]
+
+**Be Helpful and Informative**: If you can't fulfill a request, explain why and offer alternatives within an `[EXPLANATION]` block.
 """
 
 
@@ -33,6 +61,7 @@ class ChatState(rx.State):
     is_loading: bool = False
     is_streaming: bool = False
     streaming_content: str = ""
+    expanded_thinking_blocks: set[str] = set()
     quick_actions: list[dict[str, str]] = [
         {
             "name": "Explain this code",
@@ -138,39 +167,83 @@ Based on the context above, please respond to the following request.
         return prompt
 
     def _parse_assistant_response(self, text: str) -> list[Generation]:
-        """Parses the assistant's markdown response into a list of Generations."""
+        """Parses the assistant's structured response into a list of Generations."""
         generations = []
-        pattern = "File:\\s*`?(.+?)(?:\\s*\\(new\\))?`?\\s*\\n(\\w+)?\\n([\\s\\S]*?)\\n"
-        matches = list(re.finditer(pattern, text))
-        last_index = 0
-        for match in matches:
-            explanation_text = text[last_index : match.start()].strip()
-            if explanation_text:
+        section_pattern = "\\[(THINKING|EXPLANATION|CODE)\\]([\\s\\S]*?)(?=\\[(THINKING|EXPLANATION|CODE)\\]|$)"
+        code_file_pattern = (
+            "File:\\s*`?(.+?)(?:\\s*\\(new\\))?`?\\s*\\n(\\w+)?\\n([\\s\\S]*?)\\n"
+        )
+        sections = re.findall(section_pattern, text)
+        if not sections:
+            code_matches = list(re.finditer(code_file_pattern, text))
+            last_index = 0
+            for match in code_matches:
+                explanation_text = text[last_index : match.start()].strip()
+                if explanation_text:
+                    generations.append(
+                        {
+                            "type": "explanation",
+                            "content": explanation_text,
+                            "file_path": None,
+                        }
+                    )
+                file_path, language, code = match.groups()
+                generations.append(
+                    {
+                        "type": "code",
+                        "content": {"language": language or "", "code": code.strip()},
+                        "file_path": file_path.strip(),
+                    }
+                )
+                last_index = match.end()
+            remaining_text = text[last_index:].strip()
+            if remaining_text:
                 generations.append(
                     {
                         "type": "explanation",
-                        "content": explanation_text,
+                        "content": remaining_text,
                         "file_path": None,
                     }
                 )
-            file_path = match.group(1).strip()
-            language = match.group(2) or ""
-            code = match.group(3).strip()
-            generations.append(
-                {
-                    "type": "code",
-                    "content": {"language": language, "code": code},
-                    "file_path": file_path,
-                }
-            )
-            last_index = match.end()
-        remaining_text = text[last_index:].strip()
-        if remaining_text:
-            generations.append(
-                {"type": "explanation", "content": remaining_text, "file_path": None}
-            )
-        if not generations and text:
-            return [{"type": "explanation", "content": text, "file_path": None}]
+            if not generations and text:
+                return [{"type": "explanation", "content": text, "file_path": None}]
+            return generations
+        for section_type, section_content, _ in sections:
+            section_content = section_content.strip()
+            if section_type == "THINKING":
+                generations.append(
+                    {"type": "thinking", "content": section_content, "file_path": None}
+                )
+            elif section_type == "EXPLANATION":
+                generations.append(
+                    {
+                        "type": "explanation",
+                        "content": section_content,
+                        "file_path": None,
+                    }
+                )
+            elif section_type == "CODE":
+                code_match = re.search(code_file_pattern, section_content)
+                if code_match:
+                    file_path, language, code = code_match.groups()
+                    generations.append(
+                        {
+                            "type": "code",
+                            "content": {
+                                "language": language or "",
+                                "code": code.strip(),
+                            },
+                            "file_path": file_path.strip(),
+                        }
+                    )
+                else:
+                    generations.append(
+                        {
+                            "type": "explanation",
+                            "content": section_content,
+                            "file_path": None,
+                        }
+                    )
         return generations
 
     @rx.event
@@ -289,6 +362,14 @@ User Request:""",
             return rx.toast.error("Failed to load conversation.")
 
     @rx.event
+    def toggle_thinking_block(self, block_id: str):
+        if block_id in self.expanded_thinking_blocks:
+            self.expanded_thinking_blocks.remove(block_id)
+        else:
+            self.expanded_thinking_blocks.add(block_id)
+
+    @rx.event
     def clear_conversation(self):
         self.messages = []
+        self.expanded_thinking_blocks = set()
         return rx.toast.info("Conversation cleared.")
