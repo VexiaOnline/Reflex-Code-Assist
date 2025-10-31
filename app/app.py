@@ -43,10 +43,7 @@ def index() -> rx.Component:
             rx.el.div(
                 file_browser(),
                 editor_with_tabs(),
-                rx.el.div(
-                    chat_interface(),
-                    class_name="w-1/3 flex flex-col h-full bg-white border-l shrink-0",
-                ),
+                chat_interface(),
                 class_name="flex flex-1 overflow-hidden",
             ),
             class_name="flex flex-col h-screen w-screen bg-gray-100",

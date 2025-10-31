@@ -109,28 +109,26 @@ def chat_interface() -> rx.Component:
             rx.foreach(ChatState.messages, message_card),
             class_name="flex-1 p-4 space-y-4 overflow-y-auto",
         ),
-        rx.el.div(
-            rx.el.form(
-                rx.el.div(
-                    rx.el.input(
-                        id="chat-input",
-                        name="chat_input",
-                        placeholder="Type your message... (Ctrl+K)",
-                        class_name="flex-1 p-2 border rounded-lg",
-                        default_value="",
-                    ),
-                    rx.el.button(
-                        rx.icon("send", class_name="h-5 w-5"),
-                        type="submit",
-                        class_name="p-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50",
-                        disabled=ChatState.is_loading,
-                    ),
-                    class_name="flex items-center gap-2",
+        rx.el.form(
+            rx.el.div(
+                rx.el.input(
+                    id="chat-input",
+                    name="chat_input",
+                    placeholder="Type your message... (Ctrl+K)",
+                    class_name="flex-1 p-2 border rounded-lg",
+                    default_value="",
                 ),
-                on_submit=ChatState.send_message,
-                reset_on_submit=True,
+                rx.el.button(
+                    rx.icon("send", class_name="h-5 w-5"),
+                    type="submit",
+                    class_name="p-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50",
+                    disabled=ChatState.is_loading,
+                ),
+                class_name="flex items-center gap-2",
             ),
+            on_submit=ChatState.send_message,
+            reset_on_submit=True,
             class_name="p-4 border-t",
         ),
-        class_name="flex flex-col h-1/2",
+        class_name="flex flex-col h-full",
     )
