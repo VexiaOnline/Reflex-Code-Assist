@@ -1,0 +1,7 @@
+
+reflex==0.8.17
+httpx
+reflex-monaco
+numpy
+sentence-transformers
+tqdm
