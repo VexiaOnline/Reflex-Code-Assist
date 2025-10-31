@@ -43,23 +43,28 @@ class GenerationState(rx.State):
         code_content = generation["content"]["code"]
         try:
             import os
-
-            parent_dir = os.path.dirname(file_path)
-            if parent_dir:
-                os.makedirs(parent_dir, exist_ok=True)
-            with open(file_path, "w") as f:
-                f.write(code_content)
+            from app.states.project_state import ProjectState
             from app.states.editor_state import EditorState
             from app.states.context_state import ContextState
 
-            yield EditorState.on_load
+            project_state = await self.get_state(ProjectState)
+            if not project_state.has_active_project:
+                yield rx.toast.error("No active project. Cannot apply code.")
+                return
+            full_path = os.path.join(project_state.current_project_path, file_path)
+            parent_dir = os.path.dirname(full_path)
+            if parent_dir:
+                os.makedirs(parent_dir, exist_ok=True)
+            with open(full_path, "w") as f:
+                f.write(code_content)
+            editor_state = await self.get_state(EditorState)
+            yield editor_state.open_file_in_tab(full_path)
             yield ContextState.analyze_project
             yield rx.toast.success(f"Applied code to {file_path}")
             return
         except Exception as e:
             logging.exception(f"Error applying code to {file_path}: {e}")
             yield rx.toast.error(f"Failed to write to {file_path}")
-            return
 
     @rx.event
     def reject_code(self, generation_index: int):
