@@ -44,5 +44,5 @@ def context_panel() -> rx.Component:
             ),
             class_name="flex-1 p-2 overflow-y-auto",
         ),
-        class_name="flex-1 flex flex-col border-t h-1/2",
+        class_name="h-1/2 flex-1 flex flex-col border-t",
     )

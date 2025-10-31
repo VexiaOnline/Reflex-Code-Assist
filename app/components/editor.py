@@ -62,7 +62,7 @@ def editor_with_tabs() -> rx.Component:
                 MonacoEditor.create(
                     value=EditorState.current_content,
                     language="python",
-                    theme="vs-dark",
+                    theme="vs",
                     options={"lineNumbers": "on", "minimap": {"enabled": True}},
                     on_change=EditorState.on_change.debounce(250),
                     height="calc(100vh - 8.5rem)",

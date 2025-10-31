@@ -45,7 +45,6 @@ def index() -> rx.Component:
                 editor_with_tabs(),
                 rx.el.div(
                     chat_interface(),
-                    context_panel(),
                     class_name="w-1/3 flex flex-col h-full bg-white border-l shrink-0",
                 ),
                 class_name="flex flex-1 overflow-hidden",

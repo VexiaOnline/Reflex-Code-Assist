@@ -105,7 +105,7 @@ def chat_interface() -> rx.Component:
             ),
             class_name="flex items-center justify-between p-4 border-b sticky top-0 bg-white z-10",
         ),
-        rx.el.div(
+        rx.auto_scroll(
             rx.foreach(ChatState.messages, message_card),
             class_name="flex-1 p-4 space-y-4 overflow-y-auto",
         ),
