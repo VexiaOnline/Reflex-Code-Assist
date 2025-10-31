@@ -50,12 +50,24 @@ def generation_view(generation: dict, index: int) -> rx.Component:
 def message_card(message: dict) -> rx.Component:
     role = message["role"]
     generations = message["content"]
+    is_streaming_msg = (
+        (message["role"] == "assistant")
+        & (generations.length() == 0)
+        & ChatState.is_streaming
+    )
     return rx.el.div(
         rx.el.div(
             rx.el.p(role.capitalize(), class_name="font-semibold mb-1"),
-            rx.foreach(
-                generations,
-                lambda gen, i: rx.fragment(generation_view(gen, i), key=f"gen-{i}"),
+            rx.cond(
+                is_streaming_msg,
+                rx.el.p(
+                    ChatState.streaming_content + "▍",
+                    class_name="text-sm whitespace-pre-wrap",
+                ),
+                rx.foreach(
+                    generations,
+                    lambda gen, i: rx.fragment(generation_view(gen, i), key=f"gen-{i}"),
+                ),
             ),
             class_name="p-3 rounded-lg",
         ),

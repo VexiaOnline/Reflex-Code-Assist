@@ -31,6 +31,8 @@ class Message(TypedDict):
 class ChatState(rx.State):
     messages: list[Message] = []
     is_loading: bool = False
+    is_streaming: bool = False
+    streaming_content: str = ""
     quick_actions: list[dict[str, str]] = [
         {
             "name": "Explain this code",
@@ -185,6 +187,8 @@ Based on the context above, please respond to the following request.
             }
         )
         self.is_loading = True
+        self.is_streaming = True
+        self.messages.append({"role": "assistant", "content": []})
         yield
         try:
             settings = await self.get_state(SettingsState)
@@ -208,50 +212,43 @@ Based on the context above, please respond to the following request.
                 "prompt": full_prompt,
                 "max_tokens": settings.max_tokens,
                 "temperature": settings.temperature,
+                "stream": True,
                 "stop": [
                     """
 User Request:""",
                     "<|endoftext|>",
                 ],
             }
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await client.post(api_url, json=payload)
-                response.raise_for_status()
-                result = response.json()
-                assistant_message = result["choices"][0]["text"]
-                parsed_response = self._parse_assistant_response(assistant_message)
-                self.messages.append({"role": "assistant", "content": parsed_response})
+            async with httpx.AsyncClient(timeout=300.0) as client:
+                async with client.stream("POST", api_url, json=payload) as response:
+                    response.raise_for_status()
+                    async for chunk in response.aiter_text():
+                        if chunk.startswith("data: "):
+                            data_str = chunk.replace("data: ", "").strip()
+                            if data_str == "[DONE]":
+                                break
+                            try:
+                                data = json.loads(data_str)
+                                self.streaming_content += data["choices"][0]["text"]
+                                yield
+                            except json.JSONDecodeError as e:
+                                logging.exception(
+                                    f"Could not decode streaming chunk: {data_str}: {e}"
+                                )
+                                continue
         except httpx.HTTPError as e:
             logging.exception(f"HTTP Error: {e}")
-            error_content = f"Error connecting to LLM: {e}"
-            self.messages.append(
-                {
-                    "role": "system",
-                    "content": [
-                        {
-                            "type": "explanation",
-                            "content": error_content,
-                            "file_path": None,
-                        }
-                    ],
-                }
-            )
+            self.streaming_content = f"Error connecting to LLM: {e}"
         except Exception as e:
             logging.exception(f"An unexpected error occurred: {e}")
-            self.messages.append(
-                {
-                    "role": "system",
-                    "content": [
-                        {
-                            "type": "explanation",
-                            "content": "An unexpected error occurred.",
-                            "file_path": None,
-                        }
-                    ],
-                }
-            )
+            self.streaming_content = "An unexpected error occurred."
         finally:
             self.is_loading = False
+            self.is_streaming = False
+            if self.streaming_content:
+                parsed_response = self._parse_assistant_response(self.streaming_content)
+                self.messages[-1]["content"] = parsed_response
+            self.streaming_content = ""
             yield
 
     @rx.event
